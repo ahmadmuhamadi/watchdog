@@ -63,7 +63,7 @@ func (ms *MetricsService) ServerPing(server models.ObaServer) bool {
 	return serverPing(ms.NewObaClient(server), server)
 }
 
-func (ms *MetricsService) FetchObaAPIMetrics(agencyID, agencyName, serverName, serverBaseURL, apiKey string) error {
+func (ms *MetricsService) FetchObaAPIMetrics(agencyID, agencyName, serverName, serverBaseURL, apiKey string, prefetch *OBAMetrics) error {
 	return fetchObaAPIMetrics(agencyID, agencyName, serverName, serverBaseURL, apiKey, ms.Client, ms.StaticStore, ms.Logger, ms.UnmatchedStopTracker)
 }
 
