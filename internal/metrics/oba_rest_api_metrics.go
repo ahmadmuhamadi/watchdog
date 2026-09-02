@@ -71,73 +71,77 @@ type OBAMetrics struct {
 // Returns:
 //   - error: any error encountered during request or decoding.
 
-func fetchObaAPIMetrics(agencyID, agencyName, serverName, serverBaseUrl, apiKey string, client *http.Client, staticStore *gtfs.StaticStore, logger *slog.Logger, unmatchedStopTracker *UnmatchedStopTracker) error {
-	if client == nil {
-		err := fmt.Errorf("nil http client passed to fetchObaAPIMetrics for agency %s", agencyID)
-		report.ReportErrorWithSentryOptions(err, report.SentryReportOptions{
-			Tags: map[string]string{
-				"agency_id":   agencyID,
-				"server_name": serverName,
-			},
-		})
-		return err
-	}
-
+func fetchObaAPIMetrics(agencyID, agencyName, serverName, serverBaseUrl, apiKey string, client *http.Client, staticStore *gtfs.StaticStore, logger *slog.Logger, unmatchedStopTracker *UnmatchedStopTracker, prefetch *OBAMetrics) error {
 	serverKey := models.ServerKey(serverBaseUrl, agencyID)
 	serverURL := utils.SanitizeServerURL(serverBaseUrl)
 
-	url := fmt.Sprintf("%s/api/where/metrics.json?key=%s", serverBaseUrl, apiKey)
-	sanitizedURL := utils.SanitizeServerURL(url)
-
-	logger.Info("Fetching metrics from OBA server", "agency_id", agencyID, "server_name", serverName, "url", sanitizedURL)
-
-	resp, err := client.Get(url)
-	if err != nil {
-		err = fmt.Errorf("failed to fetch metrics from %s: %v", sanitizedURL, err)
-		report.ReportErrorWithSentryOptions(err, report.SentryReportOptions{
-			Tags: map[string]string{"agency_id": agencyID, "server_name": serverName},
-			ExtraContext: map[string]interface{}{
-				"url": sanitizedURL,
-			},
-		})
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		var wrappedErr error
-		if resp.StatusCode == http.StatusNotFound {
-			wrappedErr = fmt.Errorf("server %s does not support metrics API", serverBaseUrl)
-		} else {
-			wrappedErr = fmt.Errorf("unexpected status code from %s: %d", sanitizedURL, resp.StatusCode)
+	sanitizedURL := utils.SanitizeServerURL(serverBaseUrl + metricsEndpoint)
+	if prefetch == nil {
+		if client == nil {
+			err := fmt.Errorf("nil http client passed to fetchObaAPIMetrics for agency %s", agencyID)
+			report.ReportErrorWithSentryOptions(err, report.SentryReportOptions{
+				Tags: map[string]string{
+					"agency_id":   agencyID,
+					"server_name": serverName,
+				},
+			})
+			return err
 		}
-		report.ReportErrorWithSentryOptions(wrappedErr, report.SentryReportOptions{
-			Tags: map[string]string{"agency_id": agencyID, "server_name": serverName},
-			ExtraContext: map[string]interface{}{
-				"url":         sanitizedURL,
-				"status_code": resp.StatusCode,
-			},
-		})
-		return wrappedErr
-	}
 
-	var metrics OBAMetrics
-	if err := json.NewDecoder(resp.Body).Decode(&metrics); err != nil {
-		err = fmt.Errorf("failed to decode metrics from %s: %v", sanitizedURL, err)
-		report.ReportErrorWithSentryOptions(err, report.SentryReportOptions{
-			Tags: map[string]string{"agency_id": agencyID, "server_name": serverName},
-			ExtraContext: map[string]interface{}{
-				"url": sanitizedURL,
-			},
-		})
-		return err
-	}
+		url := fmt.Sprintf("%s/api/where/metrics.json?key=%s", serverBaseUrl, apiKey)
 
+		logger.Info("Fetching metrics from OBA server", "agency_id", agencyID, "server_name", serverName, "url", sanitizedURL)
+
+		resp, err := client.Get(url)
+		if err != nil {
+			err = fmt.Errorf("failed to fetch metrics from %s: %v", sanitizedURL, err)
+			report.ReportErrorWithSentryOptions(err, report.SentryReportOptions{
+				Tags: map[string]string{"agency_id": agencyID, "server_name": serverName},
+				ExtraContext: map[string]interface{}{
+					"url": sanitizedURL,
+				},
+			})
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			var wrappedErr error
+			if resp.StatusCode == http.StatusNotFound {
+				wrappedErr = fmt.Errorf("server %s does not support metrics API", serverBaseUrl)
+			} else {
+				wrappedErr = fmt.Errorf("unexpected status code from %s: %d", sanitizedURL, resp.StatusCode)
+			}
+			report.ReportErrorWithSentryOptions(wrappedErr, report.SentryReportOptions{
+				Tags: map[string]string{"agency_id": agencyID, "server_name": serverName},
+				ExtraContext: map[string]interface{}{
+					"url":         sanitizedURL,
+					"status_code": resp.StatusCode,
+				},
+			})
+			return wrappedErr
+		}
+
+		var metrics OBAMetrics
+		if err := json.NewDecoder(resp.Body).Decode(&metrics); err != nil {
+			err = fmt.Errorf("failed to decode metrics from %s: %v", sanitizedURL, err)
+			report.ReportErrorWithSentryOptions(err, report.SentryReportOptions{
+				Tags: map[string]string{"agency_id": agencyID, "server_name": serverName},
+				ExtraContext: map[string]interface{}{
+					"url": sanitizedURL,
+				},
+			})
+			return err
+		}
+
+		prefetch = &metrics
+
+	}
 	if fetchTime, ok := staticStore.GetFetchTime(serverKey); ok {
 		GtfsBundleLastFetchedTimestamp.WithLabelValues(agencyID, agencyName, serverName, serverURL).Set(float64(fetchTime.Unix()))
 	}
 
-	entry := metrics.Data.Entry
+	entry := prefetch.Data.Entry
 
 	// The per-agency metrics below are only valid when the configured agencyID
 	// is actually one of the agencies the OBA server reports in entry.AgencyIDs.

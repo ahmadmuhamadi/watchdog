@@ -64,7 +64,7 @@ func (ms *MetricsService) ServerPing(server models.ObaServer) bool {
 }
 
 func (ms *MetricsService) FetchObaAPIMetrics(agencyID, agencyName, serverName, serverBaseURL, apiKey string, prefetch *OBAMetrics) error {
-	return fetchObaAPIMetrics(agencyID, agencyName, serverName, serverBaseURL, apiKey, ms.Client, ms.StaticStore, ms.Logger, ms.UnmatchedStopTracker)
+	return fetchObaAPIMetrics(agencyID, agencyName, serverName, serverBaseURL, apiKey, ms.Client, ms.StaticStore, ms.Logger, ms.UnmatchedStopTracker, prefetch)
 }
 
 // TrackVehicleTelemetry runs the per-vehicle telemetry pass exactly once per
