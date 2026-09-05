@@ -460,9 +460,11 @@ func boolToFloat(b bool) float64 {
 }
 
 // probeLiveAgencies fetches /api/where/metrics.json for the given server and
-// returns the set of agency IDs OBA currently reports. Returns an empty map
-// (not an error) if the response is missing or malformed — the caller treats
-// empty as "no agencies live this tick" so static-only metrics keep emitting.
+// returns the set of agency IDs OBA currently reports, along with the parsed
+// response so the caller can pass it into the per-agency metrics calls rather
+// than refetching the same body once per agency. Returns an empty map (not an
+// error) if the response is missing or malformed — the caller treats empty as
+// "no agencies live this tick" so static-only metrics keep emitting.
 func (app *Application) probeLiveAgencies(ctx context.Context, server models.ObaServer) (map[string]bool, *metrics.OBAMetrics, error) {
 	endpoint := fmt.Sprintf("%s/api/where/metrics.json?key=%s", server.ObaBaseURL, url.QueryEscape(server.ObaApiKey))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -483,7 +485,8 @@ func (app *Application) probeLiveAgencies(ctx context.Context, server models.Oba
 		return nil, nil, fmt.Errorf("/metrics.json returned %d", resp.StatusCode)
 	}
 	// Reuse the metrics package's response type so the two decoders of this
-	// endpoint can never drift apart. Only entry.AgencyIDs is read here.
+	// endpoint can never drift apart. Only entry.AgencyIDs is read here; the
+	// rest of the body is returned for fetchObaAPIMetrics to read per agency.
 	var decoded metrics.OBAMetrics
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, nil, fmt.Errorf("decode /metrics.json: %w", err)

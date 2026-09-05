@@ -76,6 +76,7 @@ func fetchObaAPIMetrics(agencyID, agencyName, serverName, serverBaseUrl, apiKey 
 	serverURL := utils.SanitizeServerURL(serverBaseUrl)
 
 	sanitizedURL := utils.SanitizeServerURL(serverBaseUrl + metricsEndpoint)
+	// If prefetch is nil, fetch the metrics from the OBA server. Otherwise, use the provided prefetch data.
 	if prefetch == nil {
 		if client == nil {
 			err := fmt.Errorf("nil http client passed to fetchObaAPIMetrics for agency %s", agencyID)
